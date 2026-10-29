@@ -7,7 +7,7 @@ import {sha256Sync, bytesToHex} from './crypto.js';
 
 export const TRANSFER_CONTRACT_ID = '01' + '00'.repeat(31);
 export const AURORA_CONTRACT_ID =
-  '763f34f8157a2428442ef087a404421cd205180bca6f54963fa3c45f98915bf1';
+  '5f9c771a56e268ab746406449630636a59ca9a3224747e2a7acaf2b6ce37c7ec';
 
 class DuskVmPanic extends Error {
   constructor(message) {

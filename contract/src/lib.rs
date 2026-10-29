@@ -309,6 +309,10 @@ mod aurora {
                 attempt_fee <= bounty / 2,
                 "Attempt fee cannot exceed 50% of the initial vault bounty"
             );
+            assert!(
+                attempt_fee == 0 || duration_blocks > 0,
+                "Vaults that charge an attempt fee must set a non-zero expiry duration so solvers can be refunded if unsolved"
+            );
 
             let cat = if category.trim().is_empty() {
                 String::from("Riddle")
@@ -619,7 +623,7 @@ mod aurora {
         }
 
         pub fn reclaim_expired(&mut self, id: u64) {
-            let caller = Self::require_moonlight();
+            let _caller = Self::require_moonlight();
             let now = abi::block_height();
             let has_pending_grace_commit = self
                 .commitments
@@ -627,7 +631,6 @@ mod aurora {
                 .any(|c| c.vault_id == id && now <= c.committed_at + REVEAL_GRACE_BLOCKS);
 
             let vault = self.vaults.get_mut(id as usize).expect("No such Aurora vault");
-            assert!(vault.creator == caller, "Only the vault creator can reclaim it");
             assert!(vault.status == STATUS_OPEN, "This vault is no longer open");
             assert!(vault.expires_at > 0, "This vault has no expiry block");
             assert!(now >= vault.expires_at, "This vault has not expired yet");
@@ -638,6 +641,8 @@ mod aurora {
 
             // Creator only reclaims their original/funded bounty (excluding solver attempt fee jackpot rollovers).
             // All solver attempt fees (`creator_fee_pool + solver_jackpot_added`) are refunded back to the solvers!
+            // Any Moonlight account (creator or solver) can trigger settlement once expired.
+            let creator_account = vault.creator;
             let creator_refund = vault.bounty.saturating_sub(vault.solver_jackpot_added);
             let solver_fee_pool_total = vault.creator_fee_pool + vault.solver_jackpot_added;
             vault.status = STATUS_RECLAIMED;
@@ -656,7 +661,7 @@ mod aurora {
             if creator_refund > 0 {
                 self.total_locked -= creator_refund;
                 let transfer = ContractToAccount {
-                    account: caller,
+                    account: creator_account,
                     value: creator_refund,
                 };
                 abi::call::<_, ()>(TRANSFER_CONTRACT, "contract_to_account", &transfer)
@@ -680,7 +685,7 @@ mod aurora {
                 "vault_reclaimed",
                 crate::VaultReclaimed {
                     id,
-                    creator: caller,
+                    creator: creator_account,
                     refunded: creator_refund,
                     solver_fees_refunded: total_solver_refunded,
                 },

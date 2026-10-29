@@ -579,9 +579,9 @@ async function renderVaultInspector() {
         </form>
       ` : ''}
 
-      ${vault.status === STATUS_OPEN && vault.expiresAt > 0 && isCreator ? `
-        <button id="reclaimVaultBtn" class="ghost-btn small" type="button" title="Refunds bounty if current block >= #${vault.expiresAt}">
-          Reclaim Expired Bounty (After Block #${vault.expiresAt})
+      ${vault.status === STATUS_OPEN && vault.expiresAt > 0 ? `
+        <button id="reclaimVaultBtn" class="ghost-btn small" type="button" title="Refunds principal to creator and 100% of attempt fees back to solvers once current block >= #${vault.expiresAt}">
+          Settle Expired &amp; Refund Fees (After Block #${vault.expiresAt})
         </button>
       ` : ''}
     </div>
@@ -1101,6 +1101,9 @@ function setupEventListeners() {
       const attemptFeeLux = Number(attemptFeeDusk) > 0 ? parseDuskToLux(attemptFeeDusk) : 0n;
       if (attemptFeeLux > bountyLux / 2n) {
         throw new Error('Attempt fee cannot exceed 50% of the initial vault bounty.');
+      }
+      if (attemptFeeLux > 0n && durationBlocks <= 0) {
+        throw new Error('Vaults that charge an attempt fee must set an Expiry Duration (> 0 blocks) so solvers can be refunded if unsolved.');
       }
       const {prepared} = await prepareCreateVault(state.dusk, {
         title,
