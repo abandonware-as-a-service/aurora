@@ -1,0 +1,10 @@
+node_modules/
+contract/target/
+vm-test/target/
+rusk-wallet.exe
+.dusk*
+*.dat
+*.key
+*.pem
+.env*
+*.log

@@ -1,0 +1,13 @@
+{
+  "name": "dusk-aurora",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aurora — On-Chain Commit-Reveal Puzzle Vaults & Privacy-Preserving Bounty Leaderboard on Dusk Network (Moonlight)",
+  "type": "module",
+  "scripts": {
+    "dev": "node tools/serve.mjs",
+    "test": "node --test app/aurora.test.mjs",
+    "test:vm": "node tools/test_vm.mjs",
+    "build:wasm": "node tools/build.mjs"
+  }
+}

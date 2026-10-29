@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AURORA — DuskVM Commit–Reveal Puzzle Vaults &amp; Moonlight Bounties</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cdefs%3E%3ClinearGradient id='g1' x1='0' y1='1' x2='1' y2='0'%3E%3Cstop offset='0%25' stop-color='%232dd4bf'/%3E%3Cstop offset='50%25' stop-color='%2338bdf8'/%3E%3Cstop offset='100%25' stop-color='%23c084fc'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='48' height='48' rx='13' fill='%23050811'/%3E%3Cpath d='M9 34C14 19 22 14 27 23C31 30 36 22 39 12' fill='none' stroke='url(%23g1)' stroke-width='3.5' stroke-linecap='round'/%3E%3Cpath d='M13 37C18 25 25 21 30 28C34 33 38 27 41 18' fill='none' stroke='url(%23g1)' stroke-width='2' stroke-opacity='0.55' stroke-linecap='round'/%3E%3Cpath d='M24 7L25.6 11.4L30 13L25.6 14.6L24 19L22.4 14.6L18 13L22.4 11.4Z' fill='%235eead4'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@600;700&amp;display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./app/style.css" />
+</head>
+<body>
+  <!-- Atmospheric Aurora Borealis Backdrop -->
+  <div class="aurora-sky" aria-hidden="true">
+    <div class="aurora-ribbon ribbon-teal"></div>
+    <div class="aurora-ribbon ribbon-cyan"></div>
+    <div class="aurora-ribbon ribbon-violet"></div>
+    <div class="aurora-grid-veil"></div>
+  </div>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-sigil" aria-hidden="true">
+        <svg class="brand-logo" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="auroraRibbonPrimary" x1="6" y1="38" x2="42" y2="10" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#2dd4bf" />
+              <stop offset="52%" stop-color="#38bdf8" />
+              <stop offset="100%" stop-color="#c084fc" />
+            </linearGradient>
+            <linearGradient id="auroraRibbonSecondary" x1="10" y1="40" x2="42" y2="18" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#34d399" stop-opacity="0.85" />
+              <stop offset="60%" stop-color="#38bdf8" stop-opacity="0.55" />
+              <stop offset="100%" stop-color="#a855f7" stop-opacity="0.2" />
+            </linearGradient>
+            <linearGradient id="auroraCurtainFill" x1="24" y1="10" x2="24" y2="40" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#2dd4bf" stop-opacity="0.26" />
+              <stop offset="65%" stop-color="#38bdf8" stop-opacity="0.08" />
+              <stop offset="100%" stop-color="#050811" stop-opacity="0" />
+            </linearGradient>
+          </defs>
+          <!-- Subtle vertical borealis curtain shimmer -->
+          <path d="M8 35C13 18 21 13 26.5 22.5C31 30 36.5 21.5 40 11L40 39L8 39Z" fill="url(#auroraCurtainFill)" />
+          <!-- Primary borealis wave -->
+          <path d="M8 35C13 18 21 13 26.5 22.5C31 30 36.5 21.5 40 11" stroke="url(#auroraRibbonPrimary)" stroke-width="3.2" stroke-linecap="round" />
+          <!-- Harmonic secondary wave -->
+          <path d="M12 38.5C17 25.5 24 21 29.5 28C33.5 33 38 26.5 41.5 17.5" stroke="url(#auroraRibbonSecondary)" stroke-width="1.9" stroke-linecap="round" />
+          <!-- Minimalist polar horizon arc -->
+          <path d="M7 39.5Q24 35.5 41 39.5" stroke="#38bdf8" stroke-opacity="0.32" stroke-width="1.2" stroke-linecap="round" />
+          <!-- Polaris zenith spark -->
+          <path d="M21 7.5L22.35 11.15L26 12.5L22.35 13.85L21 17.5L19.65 13.85L16 12.5L19.65 11.15Z" fill="#5eead4" />
+        </svg>
+      </div>
+      <div>
+        <div class="brand-title-row">
+          <h1 class="brand-title">AURORA</h1>
+          <span class="brand-tag">DuskVM · Moonlight · Commit–Reveal</span>
+        </div>
+        <p class="brand-sub">On-chain cryptographic puzzle vaults with front-run immunity &amp; opt-in winner privacy</p>
+      </div>
+    </div>
+
+    <div class="topbar-controls">
+      <div class="identity-pill network-pill" title="Target Dusk Network">
+        <span class="dot live"></span>
+        <span id="networkBadgeLabel">Dusk Testnet</span>
+      </div>
+
+      <button id="syncNodeBtn" class="chip-btn" type="button" title="Sync state from Dusk Node">
+        ↻ Sync
+      </button>
+
+      <button id="connectWalletBtn" class="secondary-btn" type="button">
+        Connect Dusk Wallet
+      </button>
+
+      <button id="openCreateModalBtn" class="primary-btn" type="button">
+        + Forge New Vault
+      </button>
+    </div>
+  </header>
+
+  <!-- Connected Moonlight Wallet Strip -->
+  <section class="persona-strip">
+    <div class="persona-strip-left">
+      <span class="strip-title">Moonlight Session</span>
+      <span id="walletStatusBadge" class="live-status">Disconnected — Read-only queries active</span>
+    </div>
+    <div class="persona-strip-right">
+      <div class="identity-pill">
+        <span class="pill-label">Contract</span>
+        <code id="activeContractShort">…</code>
+      </div>
+      <div class="identity-pill">
+        <span class="pill-label">Moonlight Account</span>
+        <code id="activeAccountKey">Not connected</code>
+      </div>
+      <div class="identity-pill shadow-pill">
+        <span class="pill-label">Shadow Identity</span>
+        <code id="activeShadowTag">Shadow #------</code>
+      </div>
+      <div class="identity-pill balance-pill">
+        <span class="pill-label">Balance</span>
+        <strong id="activeBalanceDusk">—</strong>
+      </div>
+    </div>
+  </section>
+
+  <!-- Protocol Stats Ribbon -->
+  <section class="stats-ribbon" aria-label="Protocol Statistics">
+    <div class="stat-card">
+      <span class="stat-label">Vaults Forged</span>
+      <strong id="statVaultCount" class="stat-value">0</strong>
+      <span class="stat-meta">On-chain puzzles</span>
+    </div>
+    <div class="stat-card highlight-gold">
+      <span class="stat-label">Active Locked Bounty</span>
+      <strong id="statLockedBounty" class="stat-value">0 DUSK</strong>
+      <span class="stat-meta">Escrowed in Transfer Contract</span>
+    </div>
+    <div class="stat-card highlight-emerald">
+      <span class="stat-label">Total Bounty Paid</span>
+      <strong id="statPaidBounty" class="stat-value">0 DUSK</strong>
+      <span class="stat-meta">Settled via Moonlight DvP</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Vaults Cracked</span>
+      <strong id="statCrackedCount" class="stat-value">0</strong>
+      <span class="stat-meta">Verified SHA-256 reveals</span>
+    </div>
+  </section>
+
+  <!-- Notification Banner -->
+  <div id="toastBanner" class="toast-banner hidden" role="status" aria-live="polite"></div>
+
+  <!-- Main Workspace -->
+  <main class="workspace">
+    <!-- Left Column: Vaults Gallery -->
+    <section class="panel gallery-panel">
+      <div class="panel-header">
+        <div>
+          <h2>Aurora Vaults</h2>
+          <p class="panel-sub">Select a vault to inspect its riddle, fund its bounty, or crack it</p>
+        </div>
+        <div id="vaultFilters" class="filter-pills">
+          <button class="filter-pill active" data-filter="all" type="button">All</button>
+          <button class="filter-pill" data-filter="open" type="button">Open</button>
+          <button class="filter-pill" data-filter="cracked" type="button">Cracked</button>
+          <button class="filter-pill" data-filter="expired" type="button">Reclaimed</button>
+        </div>
+      </div>
+
+      <div id="vaultList" class="vault-list"></div>
+    </section>
+
+    <!-- Center Column: Active Vault Inspector & Commit-Reveal Cracker -->
+    <section class="panel inspector-panel">
+      <div id="vaultInspector"></div>
+    </section>
+
+    <!-- Right Column: Leaderboard, Privacy Control & SDK Activity -->
+    <aside class="sidebar-col">
+      <!-- Leaderboard Panel -->
+      <section class="panel leaderboard-panel">
+        <div class="panel-header">
+          <div>
+            <h2>Bounty Leaderboard</h2>
+            <p class="panel-sub">Solvers choose Public Alias or Anonymous Shadow mode</p>
+          </div>
+        </div>
+
+        <div id="leaderboardList" class="leaderboard-list"></div>
+
+        <!-- Active Solver Privacy Toggle (`set_disclosure`) -->
+        <div class="privacy-control-card">
+          <div class="privacy-card-header">
+            <span class="privacy-badge">On-Chain Privacy Control</span>
+            <code>set_disclosure(disclose, alias)</code>
+          </div>
+          <p class="privacy-card-desc">
+            Cracked a vault? Toggle whether the contract exposes your <code>BlsPublicKey</code> &amp; alias or masks you as <strong id="privacyCardShadow">Shadow #------</strong>.
+          </p>
+          <div class="privacy-form-row">
+            <input id="disclosureAliasInput" type="text" maxlength="32" placeholder="Public alias (e.g. Captain Vesper)" />
+            <div class="privacy-btn-group">
+              <button id="disclosePublicBtn" class="secondary-btn small" type="button">Publish Identity</button>
+              <button id="discloseAnonBtn" class="ghost-btn small" type="button">Cloak as Shadow</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Live Transaction Activity & SDK Payload Inspector -->
+      <section class="panel events-panel">
+        <div class="panel-header">
+          <div>
+            <h2>Transaction &amp; SDK Activity</h2>
+            <p class="panel-sub">Encoded via <code>aurora-driver.wasm</code> &amp; signed by Dusk Wallet</p>
+          </div>
+        </div>
+        <div id="lastPreparedBox" class="prepared-box hidden">
+          <div class="prepared-header">
+            <span>Latest <code>dusk.prepareContractCall()</code></span>
+            <code id="lastPreparedFn">fn</code>
+          </div>
+          <pre id="lastPreparedJson" class="code-preview"></pre>
+        </div>
+        <div id="txFeedList" class="event-feed-list"></div>
+      </section>
+    </aside>
+  </main>
+
+  <!-- Create Vault Modal -->
+  <div id="createVaultModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="createModalTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 id="createModalTitle">Forge a New Aurora Vault</h2>
+          <p class="panel-sub">Lock a Moonlight DUSK bounty behind a SHA-256 riddle or cipher</p>
+        </div>
+        <button id="closeCreateModalBtn" class="icon-btn" type="button" aria-label="Close">✕</button>
+      </div>
+
+      <form id="createVaultForm" class="modal-form">
+        <div class="form-grid-2">
+          <label class="form-field">
+            <span>Vault Title *</span>
+            <input id="createTitleInput" type="text" maxlength="80" required placeholder="e.g. The Polar Meridian" />
+          </label>
+          <label class="form-field">
+            <span>Category</span>
+            <select id="createCategoryInput">
+              <option value="Riddle">Riddle</option>
+              <option value="Cryptography">Cryptography</option>
+              <option value="Dusk Lore">Dusk Lore</option>
+              <option value="Consensus">Consensus</option>
+              <option value="Cipher">Cipher</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="form-field">
+          <span>Riddle / Challenge Prompt *</span>
+          <textarea id="createLoreInput" rows="3" maxlength="600" required placeholder="Describe the puzzle, cipher, or question solvers must crack..."></textarea>
+        </label>
+
+        <label class="form-field">
+          <span>Initial Hint (optional, can be added later)</span>
+          <input id="createHintInput" type="text" maxlength="240" placeholder="e.g. Single word, 8 letters..." />
+        </label>
+
+        <div class="form-grid-3">
+          <label class="form-field">
+            <span>Secret Answer (hashed client-side) *</span>
+            <input id="createAnswerInput" type="text" required placeholder="e.g. blindsignature" autocomplete="off" />
+          </label>
+          <label class="form-field">
+            <span>Bounty (DUSK) *</span>
+            <input id="createBountyInput" type="number" min="1" max="100000" step="any" value="50" required />
+          </label>
+          <label class="form-field">
+            <span>Expiry Duration (Blocks, 0 = Never)</span>
+            <input id="createDurationInput" type="number" min="0" max="1000000" step="1" value="0" required />
+          </label>
+        </div>
+
+        <div class="hash-preview-box">
+          <span class="hash-preview-label">On-Chain Answer Hash (<code>SHA-256("aurora:answer:v1:" || normalized)</code>):</span>
+          <code id="createAnswerHashPreview">Type an answer above to preview its 32-byte SHA-256 digest…</code>
+        </div>
+
+        <div class="modal-actions">
+          <button id="cancelCreateModalBtn" class="ghost-btn" type="button">Cancel</button>
+          <button class="primary-btn" type="submit">Sign &amp; Forge Vault</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="./app/main.js"></script>
+</body>
+</html>
