@@ -555,7 +555,7 @@ async function renderVaultInspector() {
       </div>
       <div class="meta-item">
         <span>Created / Expires</span>
-        <strong>Block #${vault.createdAt} → ${vault.expiresAt > 0 ? `#${vault.expiresAt}` : 'Never'}</strong>
+        <strong>Block #${vault.createdAt} → #${vault.expiresAt}</strong>
       </div>
       <div class="meta-item">
         <span>Target SHA-256 Digest</span>
@@ -1091,7 +1091,7 @@ function setupEventListeners() {
       const plaintextAnswer = document.getElementById('createAnswerInput').value;
       const bountyDusk = document.getElementById('createBountyInput').value;
       const attemptFeeDusk = document.getElementById('createAttemptFeeInput')?.value || '0';
-      const durationBlocks = Number(document.getElementById('createDurationInput').value || 0);
+      const durationBlocks = Number(document.getElementById('createDurationInput').value || 200);
 
       if (plaintextAnswer.trim().length < 4) {
         throw new Error('Use an answer of at least 4 characters so its SHA-256 hash cannot be trivially brute-forced.');
@@ -1102,8 +1102,8 @@ function setupEventListeners() {
       if (attemptFeeLux > bountyLux / 2n) {
         throw new Error('Attempt fee cannot exceed 50% of the initial vault bounty.');
       }
-      if (attemptFeeLux > 0n && durationBlocks <= 0) {
-        throw new Error('Vaults that charge an attempt fee must set an Expiry Duration (> 0 blocks) so solvers can be refunded if unsolved.');
+      if (durationBlocks < 5) {
+        throw new Error('Expiry duration must be at least 5 blocks so solvers have time to commit and reveal.');
       }
       const {prepared} = await prepareCreateVault(state.dusk, {
         title,

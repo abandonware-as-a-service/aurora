@@ -132,6 +132,9 @@ mod aurora {
     // Grace window after `expires_at` allowing a solver who committed before expiry
     // to complete their reveal without being front-run by `reclaim_expired`.
     const REVEAL_GRACE_BLOCKS: u64 = 5;
+    // Every vault must have a finite expiry block so locked bounties and attempt fees
+    // can never be permanently stuck if a riddle goes unsolved.
+    const DEFAULT_DURATION_BLOCKS: u64 = 200;
 
     const ANSWER_DOMAIN: &[u8] = b"aurora:answer:v1:";
     const COMMIT_DOMAIN: &[u8] = b"aurora:commit:v1:";
@@ -309,10 +312,6 @@ mod aurora {
                 attempt_fee <= bounty / 2,
                 "Attempt fee cannot exceed 50% of the initial vault bounty"
             );
-            assert!(
-                attempt_fee == 0 || duration_blocks > 0,
-                "Vaults that charge an attempt fee must set a non-zero expiry duration so solvers can be refunded if unsolved"
-            );
 
             let cat = if category.trim().is_empty() {
                 String::from("Riddle")
@@ -328,11 +327,12 @@ mod aurora {
             }
 
             let now = abi::block_height();
-            let expires_at = if duration_blocks == 0 {
-                0
+            let effective_duration = if duration_blocks == 0 {
+                DEFAULT_DURATION_BLOCKS
             } else {
-                now + duration_blocks
+                duration_blocks
             };
+            let expires_at = now + effective_duration;
             let id = self.vaults.len() as u64;
 
             self.vaults.push(Vault {

@@ -208,11 +208,12 @@ export async function prepareCreateVault(dusk, {
   plaintextAnswer,
   bountyLux,
   attemptFeeLux = 0n,
-  durationBlocks = 0,
+  durationBlocks = 200,
 }) {
   const answerHash = await hashAnswer(plaintextAnswer);
   const bountyBig = BigInt(bountyLux);
   const attemptFeeBig = BigInt(attemptFeeLux);
+  const effectiveDuration = Number(durationBlocks) > 0 ? Number(durationBlocks) : 200;
   const prepared = await dusk.prepareContractCall({
     contract: 'aurora',
     functionName: 'create_vault',
@@ -224,7 +225,7 @@ export async function prepareCreateVault(dusk, {
       answerHash,
       rawU64(bountyBig),
       rawU64(attemptFeeBig),
-      rawU64(durationBlocks),
+      rawU64(effectiveDuration),
     ],
     privacy: 'public',
     amount: '0',
