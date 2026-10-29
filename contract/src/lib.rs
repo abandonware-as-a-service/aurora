@@ -18,6 +18,7 @@ pub struct VaultCreated {
     pub title: String,
     pub category: String,
     pub bounty: u64,
+    pub attempt_fee: u64,
     pub expires_at: u64,
 }
 
@@ -40,13 +41,14 @@ impl ContractEvent for VaultFunded {
     const TOPICS: &'static [&'static str] = &["vault_funded"];
 }
 
-/// A solver locked in a blinded commitment hash for a vault.
+/// A solver locked in a blinded commitment hash for a vault (paying `attempt_fee` if configured).
 #[derive(Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
 #[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
 pub struct SolutionCommitted {
     pub vault_id: u64,
     pub solver: BlsPublicKey,
+    pub attempt_fee_paid: u64,
     pub committed_at: u64,
 }
 
@@ -63,6 +65,8 @@ impl ContractEvent for SolutionCommitted {
 pub struct VaultCracked {
     pub id: u64,
     pub bounty: u64,
+    pub creator_fee_earned: u64,
+    pub winning_answer: String,
     pub winner: Option<BlsPublicKey>,
     pub display_name: String,
     pub disclosed: bool,
@@ -72,7 +76,7 @@ impl ContractEvent for VaultCracked {
     const TOPICS: &'static [&'static str] = &["vault_cracked"];
 }
 
-/// An expired, unsolved vault's bounty was reclaimed by its creator.
+/// An expired, unsolved vault's bounty was reclaimed by its creator (and solver attempt fees refunded).
 #[derive(Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
 #[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
@@ -80,6 +84,7 @@ pub struct VaultReclaimed {
     pub id: u64,
     pub creator: BlsPublicKey,
     pub refunded: u64,
+    pub solver_fees_refunded: u64,
 }
 
 impl ContractEvent for VaultReclaimed {
@@ -140,12 +145,16 @@ mod aurora {
         answer_hash: [u8; 32],
         creator: BlsPublicKey,
         bounty: u64,
+        attempt_fee: u64,
+        creator_fee_pool: u64,
+        solver_jackpot_added: u64,
         created_at: u64,
         expires_at: u64,
         status: u8,
         solver: Option<BlsPublicKey>,
         disclosed: bool,
         winner_label: String,
+        winning_answer: String,
         cracked_at: u64,
         attempts: u64,
     }
@@ -155,6 +164,7 @@ mod aurora {
         solver: BlsPublicKey,
         hash: [u8; 32],
         committed_at: u64,
+        fees_paid: u64,
     }
 
     struct SolverProfile {
@@ -174,6 +184,7 @@ mod aurora {
         total_locked: u64,
         total_paid: u64,
         total_cracked: u64,
+        total_creator_fees_paid: u64,
     }
 
     impl Aurora {
@@ -185,6 +196,7 @@ mod aurora {
                 total_locked: 0,
                 total_paid: 0,
                 total_cracked: 0,
+                total_creator_fees_paid: 0,
             }
         }
 
@@ -281,6 +293,7 @@ mod aurora {
             hint: String,
             answer_hash: [u8; 32],
             bounty: u64,
+            attempt_fee: u64,
             duration_blocks: u64,
         ) -> u64 {
             let creator = Self::require_moonlight();
@@ -292,6 +305,10 @@ mod aurora {
             assert!(clean_lore.len() <= 600, "Keep the challenge prompt under 600 bytes");
             assert!(hint.len() <= 240, "Keep the hint under 240 bytes");
             assert!(answer_hash != [0u8; 32], "Supply a non-zero SHA-256 answer hash");
+            assert!(
+                attempt_fee <= bounty / 2,
+                "Attempt fee cannot exceed 50% of the initial vault bounty"
+            );
 
             let cat = if category.trim().is_empty() {
                 String::from("Riddle")
@@ -322,12 +339,16 @@ mod aurora {
                 answer_hash,
                 creator,
                 bounty,
+                attempt_fee,
+                creator_fee_pool: 0,
+                solver_jackpot_added: 0,
                 created_at: now,
                 expires_at,
                 status: STATUS_OPEN,
                 solver: None,
                 disclosed: false,
                 winner_label: String::new(),
+                winning_answer: String::new(),
                 cracked_at: 0,
                 attempts: 0,
             });
@@ -340,6 +361,7 @@ mod aurora {
                     title: String::from(clean_title),
                     category: cat,
                     bounty,
+                    attempt_fee,
                     expires_at,
                 },
             );
@@ -407,6 +429,25 @@ mod aurora {
                 vault.expires_at == 0 || now < vault.expires_at,
                 "This vault has expired"
             );
+            assert!(
+                solver != vault.creator,
+                "Vault creators cannot submit solution commitments to their own vault"
+            );
+
+            let fee = vault.attempt_fee;
+            if fee > 0 {
+                abi::call::<_, ()>(TRANSFER_CONTRACT, "deposit", &fee)
+                    .expect("Attempt fee deposit to Aurora failed");
+                // 20% of each attempt fee grows the solver jackpot bounty;
+                // 80% enters the creator's escrowed fee pool (unlocked only when the vault is cracked).
+                let jackpot_cut = fee / 5;
+                let creator_cut = fee - jackpot_cut;
+                vault.bounty += jackpot_cut;
+                vault.solver_jackpot_added += jackpot_cut;
+                vault.creator_fee_pool += creator_cut;
+                self.total_locked += fee;
+            }
+
             vault.attempts += 1;
 
             if let Some(existing) = self
@@ -416,12 +457,14 @@ mod aurora {
             {
                 existing.hash = commitment;
                 existing.committed_at = now;
+                existing.fees_paid += fee;
             } else {
                 self.commitments.push(Commitment {
                     vault_id,
                     solver,
                     hash: commitment,
                     committed_at: now,
+                    fees_paid: fee,
                 });
             }
 
@@ -430,6 +473,7 @@ mod aurora {
                 crate::SolutionCommitted {
                     vault_id,
                     solver,
+                    attempt_fee_paid: fee,
                     committed_at: now,
                 },
             );
@@ -481,14 +525,14 @@ mod aurora {
 
             let shadow_tag = Self::make_shadow_tag(&solver);
             let label = Self::clean_alias(clean_alias_str, &shadow_tag, disclose_winner);
+            let normalized_ans_str =
+                String::from_utf8(Self::normalize_answer(&answer)).unwrap_or_default();
 
             let vault = self
                 .vaults
                 .get_mut(vault_id as usize)
                 .expect("No such Aurora vault");
             assert!(vault.status == STATUS_OPEN, "This vault is no longer open");
-            // A solver who committed before `expires_at` has up to `expires_at + REVEAL_GRACE_BLOCKS`
-            // to reveal so a last-block commitment cannot be blocked by the 1-block reveal delay.
             assert!(
                 vault.expires_at == 0
                     || (committed_at < vault.expires_at
@@ -501,14 +545,17 @@ mod aurora {
             );
 
             let bounty = vault.bounty;
+            let creator_fee = vault.creator_fee_pool;
+            let creator_account = vault.creator;
             vault.status = STATUS_CRACKED;
             vault.solver = Some(solver);
             vault.disclosed = disclose_winner;
             vault.winner_label = label.clone();
+            vault.winning_answer = normalized_ans_str.clone();
             vault.cracked_at = now;
             self.total_cracked += 1;
 
-            // Prune commitments for this solved vault before external call
+            // Prune commitments for this solved vault before external calls
             self.commitments.retain(|c| c.vault_id != vault_id);
 
             if bounty > 0 {
@@ -520,6 +567,17 @@ mod aurora {
                 };
                 abi::call::<_, ()>(TRANSFER_CONTRACT, "contract_to_account", &payout)
                     .expect("Bounty payout to winner failed");
+            }
+
+            if creator_fee > 0 {
+                self.total_locked -= creator_fee;
+                self.total_creator_fees_paid += creator_fee;
+                let creator_payout = ContractToAccount {
+                    account: creator_account,
+                    value: creator_fee,
+                };
+                abi::call::<_, ()>(TRANSFER_CONTRACT, "contract_to_account", &creator_payout)
+                    .expect("Attempt fee payout to vault creator failed");
             }
 
             if let Some(profile) = self.solvers.iter_mut().find(|p| p.solver == solver) {
@@ -551,6 +609,8 @@ mod aurora {
                 crate::VaultCracked {
                     id: vault_id,
                     bounty,
+                    creator_fee_earned: creator_fee,
+                    winning_answer: normalized_ans_str,
                     winner: if disclose_winner { Some(solver) } else { None },
                     display_name: label,
                     disclosed: disclose_winner,
@@ -576,27 +636,53 @@ mod aurora {
                 "Wait for active commitment reveal grace window to finish before reclaiming"
             );
 
-            let refund = vault.bounty;
+            // Creator only reclaims their original/funded bounty (excluding solver attempt fee jackpot rollovers).
+            // All solver attempt fees (`creator_fee_pool + solver_jackpot_added`) are refunded back to the solvers!
+            let creator_refund = vault.bounty.saturating_sub(vault.solver_jackpot_added);
+            let solver_fee_pool_total = vault.creator_fee_pool + vault.solver_jackpot_added;
             vault.status = STATUS_RECLAIMED;
             vault.bounty = 0;
+            vault.creator_fee_pool = 0;
+            vault.solver_jackpot_added = 0;
+
+            let mut refunds: Vec<(BlsPublicKey, u64)> = Vec::new();
+            for c in &self.commitments {
+                if c.vault_id == id && c.fees_paid > 0 {
+                    refunds.push((c.solver, c.fees_paid));
+                }
+            }
             self.commitments.retain(|c| c.vault_id != id);
 
-            if refund > 0 {
-                self.total_locked -= refund;
+            if creator_refund > 0 {
+                self.total_locked -= creator_refund;
                 let transfer = ContractToAccount {
                     account: caller,
-                    value: refund,
+                    value: creator_refund,
                 };
                 abi::call::<_, ()>(TRANSFER_CONTRACT, "contract_to_account", &transfer)
                     .expect("Refund transfer to creator failed");
             }
+
+            let mut total_solver_refunded = 0u64;
+            for (solver_acc, amt) in refunds {
+                self.total_locked -= amt;
+                total_solver_refunded += amt;
+                let refund_tx = ContractToAccount {
+                    account: solver_acc,
+                    value: amt,
+                };
+                abi::call::<_, ()>(TRANSFER_CONTRACT, "contract_to_account", &refund_tx)
+                    .expect("Attempt fee refund to solver failed");
+            }
+            debug_assert_eq!(total_solver_refunded, solver_fee_pool_total);
 
             abi::emit(
                 "vault_reclaimed",
                 crate::VaultReclaimed {
                     id,
                     creator: caller,
-                    refunded: refund,
+                    refunded: creator_refund,
+                    solver_fees_refunded: total_solver_refunded,
                 },
             );
         }
@@ -647,8 +733,19 @@ mod aurora {
             self.total_cracked
         }
 
+        pub fn total_creator_fees_paid(&self) -> u64 {
+            self.total_creator_fees_paid
+        }
+
         pub fn vault_bounty(&self, id: u64) -> u64 {
             self.vaults.get(id as usize).map_or(0, |v| v.bounty)
+        }
+
+        /// Returns `(attempt_fee, creator_fee_pool, solver_jackpot_added)` for a vault.
+        pub fn vault_economics(&self, id: u64) -> Option<(u64, u64, u64)> {
+            self.vaults.get(id as usize).map(|v| {
+                (v.attempt_fee, v.creator_fee_pool, v.solver_jackpot_added)
+            })
         }
 
         pub fn vault_meta(&self, id: u64) -> Option<(String, String, String, String)> {
@@ -683,17 +780,17 @@ mod aurora {
             self.vaults.get(id as usize).map(|v| v.answer_hash)
         }
 
-        /// Returns the winner's identity for a cracked vault.
+        /// Returns `(winner_pubkey_or_none, winner_label, winning_answer)` for a cracked vault.
         /// Privacy rule: if `disclosed` is false, the solver's `BlsPublicKey` is withheld (`None`)
         /// and only their pseudonymous shadow tag is returned.
-        pub fn vault_winner(&self, id: u64) -> Option<(Option<BlsPublicKey>, String)> {
+        pub fn vault_winner(&self, id: u64) -> Option<(Option<BlsPublicKey>, String, String)> {
             self.vaults.get(id as usize).and_then(|v| {
                 if v.status != STATUS_CRACKED {
                     None
                 } else if v.disclosed {
-                    Some((v.solver, v.winner_label.clone()))
+                    Some((v.solver, v.winner_label.clone(), v.winning_answer.clone()))
                 } else {
-                    Some((None, v.winner_label.clone()))
+                    Some((None, v.winner_label.clone(), v.winning_answer.clone()))
                 }
             })
         }

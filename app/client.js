@@ -47,12 +47,13 @@ export function connectAuroraApp({
 }
 
 export async function readProtocolStats(dusk) {
-  const [vaultCount, totalLocked, totalPaid, totalCracked, solverCount] = await Promise.all([
+  const [vaultCount, totalLocked, totalPaid, totalCracked, solverCount, totalCreatorFees] = await Promise.all([
     dusk.readContract({contract: 'aurora', functionName: 'vault_count'}),
     dusk.readContract({contract: 'aurora', functionName: 'total_bounty_locked'}),
     dusk.readContract({contract: 'aurora', functionName: 'total_bounty_paid'}),
     dusk.readContract({contract: 'aurora', functionName: 'total_cracked'}),
     dusk.readContract({contract: 'aurora', functionName: 'solver_count'}),
+    dusk.readContract({contract: 'aurora', functionName: 'total_creator_fees_paid'}).catch(() => 0),
   ]);
   return {
     vaultCount: Number(vaultCount),
@@ -60,15 +61,17 @@ export async function readProtocolStats(dusk) {
     totalPaidLux: BigInt(totalPaid),
     totalCracked: Number(totalCracked),
     solverCount: Number(solverCount),
+    totalCreatorFeesLux: BigInt(totalCreatorFees || 0),
   };
 }
 
 export async function readVaultById(dusk, id, currentBlockHeight = 0) {
   const u64Id = rawU64(id);
-  const [meta, state, bountyRaw, creator, answerHash, winnerTuple] = await Promise.all([
+  const [meta, state, bountyRaw, economicsRaw, creator, answerHash, winnerTuple] = await Promise.all([
     dusk.readContract({contract: 'aurora', functionName: 'vault_meta', args: u64Id}),
     dusk.readContract({contract: 'aurora', functionName: 'vault_state', args: u64Id}),
     dusk.readContract({contract: 'aurora', functionName: 'vault_bounty', args: u64Id}),
+    dusk.readContract({contract: 'aurora', functionName: 'vault_economics', args: u64Id}).catch(() => [0, 0, 0]),
     dusk.readContract({contract: 'aurora', functionName: 'vault_creator', args: u64Id}),
     dusk.readContract({contract: 'aurora', functionName: 'vault_answer_hash', args: u64Id}),
     dusk.readContract({contract: 'aurora', functionName: 'vault_winner', args: u64Id}),
@@ -79,8 +82,14 @@ export async function readVaultById(dusk, id, currentBlockHeight = 0) {
   const [title, lore, category, hint] = meta;
   const [status, createdAt, expiresAt, crackedAt, attempts, disclosed] = state;
   const bountyLux = BigInt(bountyRaw);
+  const [attemptFeeRaw = 0, creatorFeePoolRaw = 0, solverJackpotAddedRaw = 0] = economicsRaw || [];
+  const attemptFeeLux = BigInt(attemptFeeRaw);
+  const creatorFeePoolLux = BigInt(creatorFeePoolRaw);
+  const solverJackpotAddedLux = BigInt(solverJackpotAddedRaw);
+
   const winnerKey = winnerTuple ? winnerTuple[0] : null;
   const winnerLabel = winnerTuple ? winnerTuple[1] : null;
+  const winningAnswer = winnerTuple && winnerTuple.length > 2 ? winnerTuple[2] : '';
 
   const isExpired =
     status === STATUS_OPEN &&
@@ -106,6 +115,12 @@ export async function readVaultById(dusk, id, currentBlockHeight = 0) {
     creatorShort: shortKey(creator),
     bountyLux,
     bountyDusk: formatLuxToDusk(bountyLux),
+    attemptFeeLux,
+    attemptFeeDusk: formatLuxToDusk(attemptFeeLux),
+    creatorFeePoolLux,
+    creatorFeePoolDusk: formatLuxToDusk(creatorFeePoolLux),
+    solverJackpotAddedLux,
+    solverJackpotAddedDusk: formatLuxToDusk(solverJackpotAddedLux),
     status,
     statusLabel,
     isExpired,
@@ -116,6 +131,7 @@ export async function readVaultById(dusk, id, currentBlockHeight = 0) {
     disclosed: Boolean(disclosed),
     winnerKey,
     winnerLabel,
+    winningAnswer,
     answerHashHex: answerHash ? bytesToHex(answerHash) : '',
   };
 }
@@ -191,10 +207,12 @@ export async function prepareCreateVault(dusk, {
   hint = '',
   plaintextAnswer,
   bountyLux,
+  attemptFeeLux = 0n,
   durationBlocks = 0,
 }) {
   const answerHash = await hashAnswer(plaintextAnswer);
   const bountyBig = BigInt(bountyLux);
+  const attemptFeeBig = BigInt(attemptFeeLux);
   const prepared = await dusk.prepareContractCall({
     contract: 'aurora',
     functionName: 'create_vault',
@@ -205,6 +223,7 @@ export async function prepareCreateVault(dusk, {
       String(hint ?? '').trim(),
       answerHash,
       rawU64(bountyBig),
+      rawU64(attemptFeeBig),
       rawU64(durationBlocks),
     ],
     privacy: 'public',
@@ -246,16 +265,18 @@ export async function prepareCommitSolution(dusk, {
   solverAccount,
   plaintextAnswer,
   salt,
+  attemptFeeLux = 0n,
 }) {
   const answerHash = await hashAnswer(plaintextAnswer);
   const commitmentBytes = await hashCommitment(vaultId, solverAccount, answerHash, salt);
+  const attemptFeeBig = BigInt(attemptFeeLux);
   const prepared = await dusk.prepareContractCall({
     contract: 'aurora',
     functionName: 'commit_solution',
     args: [rawU64(vaultId), commitmentBytes],
     privacy: 'public',
     amount: '0',
-    deposit: '0',
+    deposit: attemptFeeBig.toString(),
   });
   return {
     prepared,

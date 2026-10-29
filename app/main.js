@@ -441,12 +441,17 @@ function renderVaultGallery() {
         footerRight = `<span class="winner-mini">No expiry</span>`;
       }
 
+      const feeTag = v.attemptFeeLux > 0n
+        ? `<span class="cat-badge" title="Attempt Fee (80% Creator Escrow / 20% Jackpot)">Fee: ${escapeHtml(v.attemptFeeDusk)} DUSK</span>`
+        : `<span class="cat-badge">Free Try</span>`;
+
       return `
         <article class="vault-card ${isSelected ? 'selected' : ''}" data-vault-id="${v.id}">
           <div class="vault-card-top">
             <div class="vault-id-cat">
               <span>VAULT #${v.id}</span>
               <span class="cat-badge">${escapeHtml(v.category)}</span>
+              ${feeTag}
             </div>
             <span class="status-badge ${statusClass}">${escapeHtml(v.statusLabel)}</span>
           </div>
@@ -541,12 +546,16 @@ async function renderVaultInspector() {
         <code title="${escapeHtml(vault.creator)}">${escapeHtml(vault.creatorShort)}${isCreator ? ' (You)' : ''}</code>
       </div>
       <div class="meta-item">
-        <span>Created / Expires</span>
-        <strong>Block #${vault.createdAt} → ${vault.expiresAt > 0 ? `#${vault.expiresAt}` : 'Never'}</strong>
+        <span>Attempt Fee (80% Creator / 20% Pot)</span>
+        <strong>${vault.attemptFeeLux > 0n ? `${escapeHtml(vault.attemptFeeDusk)} DUSK / commit` : 'Free (0 DUSK)'}</strong>
       </div>
       <div class="meta-item">
-        <span>Commit Attempts</span>
-        <strong>${vault.attempts}</strong>
+        <span>Creator Fee Escrow (${vault.attempts} tries)</span>
+        <strong>${escapeHtml(vault.creatorFeePoolDusk)} DUSK ${vault.status === STATUS_CRACKED ? '(Paid)' : '(Unlocked on Crack)'}</strong>
+      </div>
+      <div class="meta-item">
+        <span>Created / Expires</span>
+        <strong>Block #${vault.createdAt} → ${vault.expiresAt > 0 ? `#${vault.expiresAt}` : 'Never'}</strong>
       </div>
       <div class="meta-item">
         <span>Target SHA-256 Digest</span>
@@ -586,13 +595,15 @@ async function renderVaultInspector() {
             ? `— Public Moonlight Key: <code>${escapeHtml(shortKey(vault.winnerKey))}</code>`
             : `— <em>Identity cloaked on-chain (<code>vault_winner</code> key is <code>null</code>)</em>`
           }
+          ${vault.winningAnswer ? `<br/>Revealed Answer: <code>${escapeHtml(vault.winningAnswer)}</code>` : ''}
+          ${vault.creatorFeePoolLux > 0n ? ` · Creator Fee Unlocked: <strong>${escapeHtml(vault.creatorFeePoolDusk)} DUSK</strong>` : ''}
         </p>
       </div>
     ` : vault.status === STATUS_RECLAIMED ? `
       <div class="winner-banner" style="border-color: rgba(248,113,113,0.4); background: rgba(248,113,113,0.08);">
         <h4 style="color: var(--accent-danger);">Vault Expired &amp; Bounty Reclaimed</h4>
         <p style="font-size:12.5px; color: var(--text-secondary);">
-          The ${escapeHtml(vault.bountyDusk)} DUSK bounty was refunded to the creator (${escapeHtml(vault.creatorShort)}).
+          The creator's principal bounty was refunded to ${escapeHtml(vault.creatorShort)}, and all escrowed solver attempt fees were automatically refunded.
         </p>
       </div>
     ` : `
@@ -600,7 +611,7 @@ async function renderVaultInspector() {
       <div class="crack-section">
         <h3>Crack This Vault (2-Step Commit–Reveal)</h3>
         <p class="panel-sub">
-          Step 1 anchors a salted commitment bound to your <code>BlsPublicKey</code>. Step 2 reveals your answer at least 1 block later so mempool bots cannot steal your bounty.
+          Step 1 anchors a salted commitment bound to your <code>BlsPublicKey</code>${vault.attemptFeeLux > 0n ? ` (${escapeHtml(vault.attemptFeeDusk)} DUSK attempt fee: 20% grows the jackpot, 80% enters creator escrow unlocked only on crack)` : ''}. Step 2 reveals your answer at least 1 block later.
         </p>
 
         <div class="crack-steps">
@@ -630,7 +641,7 @@ async function renderVaultInspector() {
             </div>
 
             <button class="secondary-btn" type="submit" style="margin-top:auto;">
-              1. Sign &amp; Submit Commitment
+              1. Sign &amp; Submit Commitment${vault.attemptFeeLux > 0n ? ` (${escapeHtml(vault.attemptFeeDusk)} DUSK)` : ''}
             </button>
           </form>
 
@@ -776,6 +787,7 @@ function bindInspectorEvents(vault, draft) {
         solverAccount,
         plaintextAnswer: draft.answer,
         salt: draft.salt,
+        attemptFeeLux: vault.attemptFeeLux,
       });
       await signAndSubmit(prepared, `Commit solution to Vault #${vault.id}`);
     } catch (err) {
@@ -1078,6 +1090,7 @@ function setupEventListeners() {
       const hint = document.getElementById('createHintInput').value;
       const plaintextAnswer = document.getElementById('createAnswerInput').value;
       const bountyDusk = document.getElementById('createBountyInput').value;
+      const attemptFeeDusk = document.getElementById('createAttemptFeeInput')?.value || '0';
       const durationBlocks = Number(document.getElementById('createDurationInput').value || 0);
 
       if (plaintextAnswer.trim().length < 4) {
@@ -1085,6 +1098,10 @@ function setupEventListeners() {
       }
 
       const bountyLux = parseDuskToLux(bountyDusk);
+      const attemptFeeLux = Number(attemptFeeDusk) > 0 ? parseDuskToLux(attemptFeeDusk) : 0n;
+      if (attemptFeeLux > bountyLux / 2n) {
+        throw new Error('Attempt fee cannot exceed 50% of the initial vault bounty.');
+      }
       const {prepared} = await prepareCreateVault(state.dusk, {
         title,
         lore,
@@ -1092,6 +1109,7 @@ function setupEventListeners() {
         hint,
         plaintextAnswer,
         bountyLux,
+        attemptFeeLux,
         durationBlocks,
       });
 

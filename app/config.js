@@ -28,7 +28,7 @@ export const ACTIVE_NETWORK = 'testnet';
 
 // 2. Paste your deployed 32-byte (64 hex chars) Aurora ContractId on DuskVM:
 export const DEFAULT_CONTRACT_ID =
-  'b9b3e1e61eeb55bb9a3acda7d4e612100925450fa0005bd97c7255e235596828';
+  '763f34f8157a2428442ef087a404421cd205180bca6f54963fa3c45f98915bf1';
 
 export const DRIVER_URL = new URL('./vendor/aurora-driver.wasm', import.meta.url).href;
 

@@ -245,19 +245,25 @@
           <textarea id="createLoreInput" rows="3" maxlength="600" required placeholder="Describe the puzzle, cipher, or question solvers must crack..."></textarea>
         </label>
 
-        <label class="form-field">
-          <span>Initial Hint (optional, can be added later)</span>
-          <input id="createHintInput" type="text" maxlength="240" placeholder="e.g. Single word, 8 letters..." />
-        </label>
-
-        <div class="form-grid-3">
+        <div class="form-grid-2">
           <label class="form-field">
             <span>Secret Answer (hashed client-side) *</span>
             <input id="createAnswerInput" type="text" required placeholder="e.g. blindsignature" autocomplete="off" />
           </label>
           <label class="form-field">
-            <span>Bounty (DUSK) *</span>
+            <span>Initial Hint (optional, can be added later)</span>
+            <input id="createHintInput" type="text" maxlength="240" placeholder="e.g. Single word, 8 letters..." />
+          </label>
+        </div>
+
+        <div class="form-grid-3">
+          <label class="form-field">
+            <span>Initial Bounty (DUSK) *</span>
             <input id="createBountyInput" type="number" min="1" max="100000" step="any" value="50" required />
+          </label>
+          <label class="form-field">
+            <span>Attempt Fee (DUSK, max 50% bounty)</span>
+            <input id="createAttemptFeeInput" type="number" min="0" max="50000" step="any" value="2" required />
           </label>
           <label class="form-field">
             <span>Expiry Duration (Blocks, 0 = Never)</span>

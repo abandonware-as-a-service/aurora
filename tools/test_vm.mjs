@@ -1,19 +1,15 @@
 // End-to-end DuskVM WebAssembly integration test suite for Aurora.
 // Deploys the compiled Rust WASM contracts (`transfer-mock.wasm` at 0100...00 and
-// `dusk-aurora.wasm` at 4141...41) into `DuskWasmVm` and verifies:
+// `dusk-aurora.wasm`) into `DuskWasmVm` and verifies:
 //   1. Byte-for-byte parity between JS Web Crypto (hashAnswer, hashCommitment, computeShadowTag)
 //      and on-chain `abi::sha256` computations in `dusk-aurora.wasm`.
-//   2. Vault creation (`create_vault`) with real Moonlight DUSK bounty deposit via TRANSFER_CONTRACT.
+//   2. Vault creation (`create_vault`) with real Moonlight DUSK bounty deposit + `attempt_fee`.
 //   3. Community bounty top-up (`fund_vault`) and creator hint unlock (`add_hint`).
-//   4. 2-step Commit-Reveal (`commit_solution` -> `reveal_solution`) with anti-front-running:
-//      - Same-block reveal rejection (`MIN_REVEAL_DELAY` enforcement).
-//      - Mempool sniper bot front-run rejection (commitment binds `solver` BlsPublicKey).
-//   5. Anonymous solver reveal (`disclose_winner = false`):
-//      - Winner receives full Moonlight DUSK bounty in TRANSFER_CONTRACT.
-//      - On-chain `vault_winner`, `solver_entry`, and `vault_cracked` event keep `winner`/`solver` as `null`
-//        and expose only the deterministic `Shadow #xxxxxx` tag.
+//   4. 2-step Commit-Reveal (`commit_solution` -> `reveal_solution`) with anti-front-running
+//      and Solve-to-Unlock Attempt Fee Escrow (80% creator escrow unlocked on crack, 20% jackpot rollover).
+//   5. Anonymous solver reveal (`disclose_winner = false`) + on-chain `winning_answer` verification.
 //   6. Disclosed solver reveal (`disclose_winner = true`) and live `set_disclosure` toggling.
-//   7. Expired vault creator refund (`reclaim_expired`) before vs. after `expires_at`.
+//   7. Expired vault creator refund (`reclaim_expired`) + automatic refund of solver attempt fees on uncracked expiry.
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {copyFileSync, existsSync, mkdirSync, readFileSync} from 'node:fs';
@@ -29,7 +25,6 @@ import {
   hashAnswer,
   hashCommitment,
   computeShadowTag,
-  hexToBytes,
 } from '../app/crypto.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -172,7 +167,7 @@ const onChainCommitHash = call(
 assert.deepEqual(onChainCommitHash, commitRook0, 'compute_commitment must match JS hashCommitment');
 console.log('  ✓ On-chain abi::sha256 matches JS Web Crypto byte-for-byte');
 
-// --- 2. Create Vault #0 by 'you' with 250 DUSK bounty, duration 50 blocks (expires at block 52) ---
+// --- 2. Create Vault #0 by 'you' with 250 DUSK bounty, 5 DUSK attempt fee, duration 50 blocks ---
 const vault0Id = call(
   AURORA_CONTRACT_ID,
   auroraDriver,
@@ -184,13 +179,14 @@ const vault0Id = call(
     'Think of what breaks when you speak.',
     answerHash0,
     rawU64(250n * ONE_DUSK),
+    rawU64(5n * ONE_DUSK),
     rawU64(50),
   ],
   {sender: 'you', height: 2}
 ).decode();
 assert.equal(vault0Id, '0');
 
-// 'wick' tops up Vault #0 with 50 DUSK (total bounty = 300 DUSK)
+// 'wick' tops up Vault #0 with 50 DUSK (base bounty = 300 DUSK)
 assert.equal(
   call(AURORA_CONTRACT_ID, auroraDriver, 'fund_vault', [rawU64(0), rawU64(50n * ONE_DUSK)], {
     sender: 'wick',
@@ -208,8 +204,19 @@ assert.equal(
   true
 );
 
-// --- 3. Anti-front-running checks ---
-// 'rook' commits solution to Vault #0 at block 4
+// Creator 'you' cannot commit to their own vault -> MUST FAIL
+const creatorSelfCommit = call(
+  AURORA_CONTRACT_ID,
+  auroraDriver,
+  'commit_solution',
+  [rawU64(0), commitRook0],
+  {sender: 'you', height: 4}
+);
+assert.equal(creatorSelfCommit.ok, false, 'Creator must not commit to their own vault');
+assert.match(creatorSelfCommit.error, /cannot submit solution commitments to their own vault/);
+
+// --- 3. Anti-front-running & Attempt Fee Escrow checks ---
+// 'rook' commits solution to Vault #0 at block 4 (pays 5 DUSK attempt fee: 1 DUSK -> jackpot, 4 DUSK -> creator escrow)
 assert.equal(
   call(AURORA_CONTRACT_ID, auroraDriver, 'commit_solution', [rawU64(0), commitRook0], {
     sender: 'rook',
@@ -229,7 +236,7 @@ const sameBlockReveal = call(
 assert.equal(sameBlockReveal.ok, false, 'Same-block reveal must fail');
 assert.match(sameBlockReveal.error, /Wait at least 1 block/);
 
-// Mempool bot 'wick' copies rook's commitment hash at block 4 and tries to reveal at block 5 -> MUST FAIL
+// Mempool bot 'wick' copies rook's commitment hash at block 4 (also pays 5 DUSK attempt fee!) and tries to reveal at block 5 -> MUST FAIL
 assert.equal(
   call(AURORA_CONTRACT_ID, auroraDriver, 'commit_solution', [rawU64(0), commitRook0], {
     sender: 'wick',
@@ -246,9 +253,12 @@ const wickFrontRun = call(
 );
 assert.equal(wickFrontRun.ok, false, 'Copied commitment by another account must fail on reveal');
 assert.match(wickFrontRun.error, /Commitment hash does not match/);
-console.log('  ✓ Anti-front-running verified (same-block reveal & mempool commitment-copying blocked)');
+console.log('  ✓ Anti-front-running verified (same-block reveal, self-commit & mempool commitment-copying blocked)');
 
-// --- 4. Anonymous Reveal by 'rook' (disclose_winner = false) ---
+// --- 4. Anonymous Reveal by 'rook' (disclose_winner = false) + Solve-to-Unlock Creator Fee Payout ---
+// Total attempt fees on Vault #0 = 10 DUSK (5 from rook + 5 from wick):
+// - Jackpot rollover = 2 DUSK -> total bounty = 302 DUSK
+// - Creator fee pool = 8 DUSK -> paid to creator 'you' upon crack!
 const rookReveal = call(
   AURORA_CONTRACT_ID,
   auroraDriver,
@@ -264,13 +274,15 @@ const crackedEvent = auroraDriver.decodeEvent('vault_cracked', crackedEventRaw.r
 assert.equal(crackedEvent.winner, null, 'Anonymous reveal must hide winner BlsPublicKey in event');
 assert.equal(crackedEvent.display_name, rookShadowTag, 'Anonymous reveal must emit deterministic Shadow tag');
 assert.equal(crackedEvent.disclosed, false);
-assert.equal(BigInt(crackedEvent.bounty), 300n * ONE_DUSK);
+assert.equal(crackedEvent.winning_answer, 'silence');
+assert.equal(BigInt(crackedEvent.bounty), 302n * ONE_DUSK);
+assert.equal(BigInt(crackedEvent.creator_fee_earned), 8n * ONE_DUSK);
 
 const vault0Winner = call(AURORA_CONTRACT_ID, auroraDriver, 'vault_winner', rawU64(0), {
   height: 5,
   query: true,
 }).decode();
-assert.deepEqual(vault0Winner, [null, rookShadowTag]);
+assert.deepEqual(vault0Winner, [null, rookShadowTag, 'silence']);
 
 const rookEntryAnon = call(AURORA_CONTRACT_ID, auroraDriver, 'solver_entry', rawU64(0), {
   height: 5,
@@ -278,13 +290,20 @@ const rookEntryAnon = call(AURORA_CONTRACT_ID, auroraDriver, 'solver_entry', raw
 }).decode();
 assert.deepEqual(rookEntryAnon, [null, rookShadowTag, 1, 5, false]);
 
-// Verify Rook received the 300 DUSK Moonlight payout (1000 + 300 = 1300 DUSK)
+// Verify Rook balance: 1000 - 5 (attempt fee) + 302 (bounty + jackpot rollover) = 1297 DUSK
 const rookBalance = call(TRANSFER_CONTRACT_ID, transferMock.driver, 'balance_of', keys.rook, {
   height: 5,
   query: true,
 }).decode();
-assert.equal(BigInt(rookBalance), 1300n * ONE_DUSK);
-console.log(`  ✓ Anonymous reveal verified: key hidden as null (${rookShadowTag}), 300 DUSK paid to Rook`);
+assert.equal(BigInt(rookBalance), 1297n * ONE_DUSK);
+
+// Verify Creator 'you' balance: 1000 - 250 (initial bounty) + 8 (unlocked creator attempt fees) = 758 DUSK
+const youBalanceAfterCrack0 = call(TRANSFER_CONTRACT_ID, transferMock.driver, 'balance_of', keys.you, {
+  height: 5,
+  query: true,
+}).decode();
+assert.equal(BigInt(youBalanceAfterCrack0), 758n * ONE_DUSK);
+console.log(`  ✓ Anonymous reveal & Solve-to-Unlock fee split verified: 302 DUSK to Rook, 8 DUSK fees to creator`);
 
 // --- 5. Disclosed Reveal by 'fen' & live `set_disclosure` toggle by 'rook' ---
 const secretAnswer1 = 'zeroknowledge';
@@ -303,6 +322,7 @@ call(
     'Starts with zero.',
     answerHash1,
     rawU64(100n * ONE_DUSK),
+    rawU64(0),
     rawU64(20),
   ],
   {sender: 'you', height: 6}
@@ -327,7 +347,7 @@ const vault1Winner = call(AURORA_CONTRACT_ID, auroraDriver, 'vault_winner', rawU
   height: 7,
   query: true,
 }).decode();
-assert.deepEqual(vault1Winner, [keys.fen, 'Archivist Fen']);
+assert.deepEqual(vault1Winner, [keys.fen, 'Archivist Fen', 'zeroknowledge']);
 
 // Now 'rook' decides to disclose identity on the leaderboard via `set_disclosure`
 assert.equal(
@@ -355,7 +375,7 @@ assert.equal(spoofShadowAttempt.ok, false, 'Spoofing a Shadow tag must be reject
 assert.match(spoofShadowAttempt.error, /cannot impersonate anonymous Shadow tags/);
 console.log('  ✓ Disclosed winner, live set_disclosure toggle & Shadow-tag anti-spoofing verified');
 
-// --- 6. Expired Vault Creator Refund (`reclaim_expired`) & Last-Block Commit Rug-Pull Protection ---
+// --- 6. Expired Vault Creator Refund (`reclaim_expired`) + Solver Attempt Fee Refund & Grace Period ---
 const answerHash2 = await hashAnswer('dusk-fortress');
 call(
   AURORA_CONTRACT_ID,
@@ -368,10 +388,25 @@ call(
     '',
     answerHash2,
     rawU64(80n * ONE_DUSK),
+    rawU64(10n * ONE_DUSK), // 10 DUSK attempt fee
     rawU64(5), // created at height 9 + 5 = expires at height 14
   ],
   {sender: 'wick', height: 9}
 ).decode();
+
+// 'fen' makes a failed commit attempt at block 9 (paying 10 DUSK attempt fee)
+const wrongHash = await hashAnswer('wrong-guess');
+const commitFenWrong = await hashCommitment(2, keys.fen, wrongHash, 'fen-wrong');
+const fenBalBeforeAttempt = BigInt(
+  call(TRANSFER_CONTRACT_ID, transferMock.driver, 'balance_of', keys.fen, {height: 9, query: true}).decode()
+);
+assert.equal(
+  call(AURORA_CONTRACT_ID, auroraDriver, 'commit_solution', [rawU64(2), commitFenWrong], {
+    sender: 'fen',
+    height: 9,
+  }).ok,
+  true
+);
 
 const earlyReclaim = call(AURORA_CONTRACT_ID, auroraDriver, 'reclaim_expired', rawU64(2), {
   sender: 'wick',
@@ -380,11 +415,17 @@ const earlyReclaim = call(AURORA_CONTRACT_ID, auroraDriver, 'reclaim_expired', r
 assert.equal(earlyReclaim.ok, false, 'Reclaim before expires_at must fail');
 assert.match(earlyReclaim.error, /not expired yet/);
 
+// Reclaim after expiry (block 16 > 9 + 5 grace window):
+// Creator 'wick' gets back only their 80 DUSK principal, and 'fen' is automatically refunded their 10 DUSK attempt fee!
 const validReclaim = call(AURORA_CONTRACT_ID, auroraDriver, 'reclaim_expired', rawU64(2), {
   sender: 'wick',
-  height: 14,
+  height: 16,
 });
-assert.equal(validReclaim.ok, true, 'Reclaim at/after expires_at must succeed');
+assert.equal(validReclaim.ok, true, `Reclaim at/after expires_at must succeed: ${validReclaim.error}`);
+const fenBalAfterRefund = BigInt(
+  call(TRANSFER_CONTRACT_ID, transferMock.driver, 'balance_of', keys.fen, {height: 16, query: true}).decode()
+);
+assert.equal(fenBalAfterRefund, fenBalBeforeAttempt, 'Solver attempt fee must be refunded when vault expires unsolved');
 
 // Test Last-Block Commit Grace Period (Creator cannot rug-pull a solver who committed at expires_at - 1)
 const answerHash3 = await hashAnswer('last-second-save');
@@ -399,9 +440,10 @@ call(
     '',
     answerHash3,
     rawU64(50n * ONE_DUSK),
-    rawU64(4), // created at height 15 + 4 = expires at height 19
+    rawU64(0),
+    rawU64(3), // created at height 16 + 3 = expires at height 19
   ],
-  {sender: 'wick', height: 15}
+  {sender: 'wick', height: 16}
 ).decode();
 
 const commitYou3 = await hashCommitment(3, keys.you, answerHash3, 'grace-salt');
@@ -431,18 +473,19 @@ const graceReveal = call(
 );
 assert.equal(graceReveal.ok, true, `Grace period reveal failed: ${graceReveal.error}`);
 
-// Wick seeded 1000 DUSK, funded 50 DUSK to Vault #0, locked 80 DUSK in Vault #2 (reclaimed), locked 50 DUSK in Vault #3 (won by 'you') => 900 DUSK
+// Wick seeded 1000 DUSK, funded 50 DUSK to Vault #0, paid 5 DUSK attempt fee on Vault #0,
+// locked 80 DUSK in Vault #2 (reclaimed), locked 50 DUSK in Vault #3 (won by 'you') => 895 DUSK
 const wickBalance = call(TRANSFER_CONTRACT_ID, transferMock.driver, 'balance_of', keys.wick, {
   height: 19,
   query: true,
 }).decode();
-assert.equal(BigInt(wickBalance), 900n * ONE_DUSK);
+assert.equal(BigInt(wickBalance), 895n * ONE_DUSK);
 
 const poolBalance = call(TRANSFER_CONTRACT_ID, transferMock.driver, 'pool_balance', null, {
   height: 19,
   query: true,
 }).decode();
 assert.equal(BigInt(poolBalance), 0n, 'All locked contract DUSK should be settled');
-console.log('  ✓ Expiry refund, last-block commit grace period & zero-sum Moonlight accounting verified');
+console.log('  ✓ Uncracked attempt-fee refund, last-block commit grace period & zero-sum Moonlight accounting verified');
 
 console.log('\nALL DUSK-VM INTEGRATION TESTS PASSED!');

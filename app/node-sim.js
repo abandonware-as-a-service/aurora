@@ -183,7 +183,7 @@ export async function createPracticeNode({
     ], name, 1);
   }
 
-  // 2. Vault #0: Open Riddle Vault created by Rook (250 DUSK bounty)
+  // 2. Vault #0: Open Riddle Vault created by Rook (250 DUSK bounty, 5 DUSK attempt fee)
   blockHeight = 2;
   const ans0 = await hashAnswer('silence');
   execInternal(AURORA_CONTRACT_ID, auroraDriver, 'create_vault', [
@@ -193,10 +193,11 @@ export async function createPracticeNode({
     'Seven letters. The quietest thing in a cathedral.',
     ans0,
     rawU64(250n * LUX_SCALE),
+    rawU64(5n * LUX_SCALE),
     rawU64(60),
   ], 'rook', blockHeight);
 
-  // 3. Vault #1: Open Cryptography Vault created by Fen (420 DUSK bounty)
+  // 3. Vault #1: Open Cryptography Vault created by Fen (420 DUSK bounty, 10 DUSK attempt fee)
   blockHeight = 3;
   const ans1 = await hashAnswer('witness');
   execInternal(AURORA_CONTRACT_ID, auroraDriver, 'create_vault', [
@@ -206,6 +207,7 @@ export async function createPracticeNode({
     'Think of composer.append_... in dusk-plonk.',
     ans1,
     rawU64(420n * LUX_SCALE),
+    rawU64(10n * LUX_SCALE),
     rawU64(80),
   ], 'fen', blockHeight);
 
@@ -219,6 +221,7 @@ export async function createPracticeNode({
     'Nine letters, starts with N.',
     ans2,
     rawU64(180n * LUX_SCALE),
+    rawU64(0),
     rawU64(50),
   ], 'you', blockHeight);
 
@@ -243,6 +246,7 @@ export async function createPracticeNode({
     'Starts with R (12 letters).',
     ans3,
     rawU64(310n * LUX_SCALE),
+    rawU64(0),
     rawU64(50),
   ], 'rook', blockHeight);
 
@@ -267,6 +271,7 @@ export async function createPracticeNode({
     'Shift each letter 3 positions backward in the alphabet (N -> K, D -> A...).',
     ans4,
     rawU64(125n * LUX_SCALE),
+    rawU64(0),
     rawU64(6), // expires at block 16
   ], 'you', blockHeight);
 

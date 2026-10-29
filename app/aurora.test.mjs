@@ -80,9 +80,10 @@ test('Dusk Connect client + Practice Node full lifecycle (readContract & prepare
     assert.equal(board0[1].disclosed, false);
     assert.equal(board0[1].solverKey, null);
 
-    // 3. Crack Vault #0 ("The Whispering Arch", answer "silence") as 'you'
+    // 3. Crack Vault #0 ("The Whispering Arch", answer "silence", 250 DUSK bounty, 5 DUSK attempt fee) as 'you'
     //    with Mempool Front-Runner Bot simulation active AND anonymous mode (discloseWinner = false)
     const youBalanceBefore = node.getBalanceLux('you');
+    const rookBalanceBefore = node.getBalanceLux('rook');
     const salt = 'vesper-secret-salt-42';
 
     const {prepared: commitTx, commitmentHex} = await prepareCommitSolution(dusk, {
@@ -90,9 +91,11 @@ test('Dusk Connect client + Practice Node full lifecycle (readContract & prepare
       solverAccount: node.keys.you,
       plaintextAnswer: '  Silence ',
       salt,
+      attemptFeeLux: 5n * LUX_SCALE,
     });
     assert.equal(commitTx.privacy, 'public');
     assert.equal(commitTx.fnName, 'commit_solution');
+    assert.equal(commitTx.deposit, (5n * LUX_SCALE).toString());
 
     const commitRes = node.executePreparedCall(commitTx, {
       persona: 'you',
@@ -123,15 +126,20 @@ test('Dusk Connect client + Practice Node full lifecycle (readContract & prepare
     assert.equal(revealRes.botReport[0].phase, 'reveal_frontrun_blocked');
     assert.equal(revealRes.botReport[0].ok, false);
 
-    // Verify 'you' received 250 DUSK and winner key is hidden as null on-chain
+    // 2 commits (you + sniper bot wick) paid 5 DUSK each = 10 DUSK total fees:
+    // - 20% (2 DUSK) rolled into Vault #0 jackpot -> 252 DUSK paid to 'you' (net +247 DUSK after 5 DUSK fee)
+    // - 80% (8 DUSK) unlocked and paid to Vault #0 creator 'rook'
     const youBalanceAfter = node.getBalanceLux('you');
-    assert.equal(youBalanceAfter - youBalanceBefore, 250n * LUX_SCALE);
+    const rookBalanceAfter = node.getBalanceLux('rook');
+    assert.equal(youBalanceAfter - youBalanceBefore, 247n * LUX_SCALE);
+    assert.equal(rookBalanceAfter - rookBalanceBefore, 8n * LUX_SCALE);
 
     const youShadow = await computeShadowTag(node.keys.you);
     const crackedVault0 = await readVaultById(dusk, 0, node.getBlockHeight());
     assert.equal(crackedVault0.statusLabel, 'Cracked');
     assert.equal(crackedVault0.winnerKey, null);
     assert.equal(crackedVault0.winnerLabel, youShadow);
+    assert.equal(crackedVault0.winningAnswer, 'silence');
 
     // 4. Toggle 'you' disclosure on-chain via `set_disclosure(true, "Captain Vesper")`
     const discloseTx = await prepareSetDisclosure(dusk, {
