@@ -572,8 +572,8 @@ async function renderVaultInspector() {
         <strong>Block #${vault.createdAt} → #${vault.expiresAt}</strong>
       </div>
       <div class="meta-item">
-        <span>Target SHA-256 Digest</span>
-        <code title="0x${vault.answerHashHex}">0x${vault.answerHashHex.slice(0, 16)}…</code>
+        <span>Commit Slot Window</span>
+        <strong title="Each commitment slot stays valid for 120 blocks (~25-30 minutes) to reveal">120 Blocks (~30m)</strong>
       </div>
     </div>
 

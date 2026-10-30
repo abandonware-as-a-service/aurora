@@ -67,13 +67,12 @@ export async function readProtocolStats(dusk) {
 
 export async function readVaultById(dusk, id, currentBlockHeight = 0) {
   const u64Id = rawU64(id);
-  const [meta, state, bountyRaw, economicsRaw, creator, answerHash, winnerTuple] = await Promise.all([
+  const [meta, state, bountyRaw, economicsRaw, creator, winnerTuple] = await Promise.all([
     dusk.readContract({contract: 'aurora', functionName: 'vault_meta', args: u64Id}),
     dusk.readContract({contract: 'aurora', functionName: 'vault_state', args: u64Id}),
     dusk.readContract({contract: 'aurora', functionName: 'vault_bounty', args: u64Id}),
     dusk.readContract({contract: 'aurora', functionName: 'vault_economics', args: u64Id}).catch(() => [0, 0, 0]),
     dusk.readContract({contract: 'aurora', functionName: 'vault_creator', args: u64Id}),
-    dusk.readContract({contract: 'aurora', functionName: 'vault_answer_hash', args: u64Id}),
     dusk.readContract({contract: 'aurora', functionName: 'vault_winner', args: u64Id}),
   ]);
 
@@ -132,7 +131,6 @@ export async function readVaultById(dusk, id, currentBlockHeight = 0) {
     winnerKey,
     winnerLabel,
     winningAnswer,
-    answerHashHex: answerHash ? bytesToHex(answerHash) : '',
   };
 }
 
