@@ -245,13 +245,13 @@
           <textarea id="createLoreInput" rows="3" maxlength="600" required placeholder="Describe the puzzle, cipher, or question solvers must crack..."></textarea>
         </label>
 
-        <div class="form-grid-2">
+        <div class="form-grid-equal">
           <label class="form-field">
             <span>Secret Answer (hashed client-side) *</span>
             <input id="createAnswerInput" type="text" required placeholder="e.g. blindsignature" autocomplete="off" />
           </label>
           <label class="form-field">
-            <span>Initial Hint (optional, can be added later)</span>
+            <span>Initial Hint (optional)</span>
             <input id="createHintInput" type="text" maxlength="240" placeholder="e.g. Single word, 8 letters..." />
           </label>
         </div>
@@ -262,12 +262,12 @@
             <input id="createBountyInput" type="number" min="1" max="100000" step="any" value="50" required />
           </label>
           <label class="form-field">
-            <span>Attempt Fee (DUSK, max 50% bounty)</span>
-            <input id="createAttemptFeeInput" type="number" min="0" max="50000" step="any" value="2" required />
+            <span id="createAttemptFeeLabel">Attempt Fee (max 25 DUSK)</span>
+            <input id="createAttemptFeeInput" type="number" min="0" max="25" step="any" value="2" required />
           </label>
           <label class="form-field">
-            <span>Expiry Duration (Blocks) *</span>
-            <input id="createDurationInput" type="number" min="5" max="1000000" step="1" value="200" required />
+            <span>Expiry Duration (min 200 blocks) *</span>
+            <input id="createDurationInput" type="number" min="200" max="1000000" step="1" value="200" required />
           </label>
         </div>
 

@@ -1081,9 +1081,59 @@ function setupEventListeners() {
     createHashPreview.textContent = `0x${bytesToHex(digest)}`;
   });
 
+  // Live UI clamping for Bounty, Attempt Fee (max 50% of bounty), and Expiry Duration (min 200 blocks)
+  const createBountyEl = document.getElementById('createBountyInput');
+  const createFeeEl = document.getElementById('createAttemptFeeInput');
+  const createFeeLabelEl = document.getElementById('createAttemptFeeLabel');
+  const createDurationEl = document.getElementById('createDurationInput');
+
+  const syncAttemptFeeCap = () => {
+    if (!createBountyEl || !createFeeEl) return;
+    const bountyVal = Math.max(0, Number(createBountyEl.value) || 0);
+    const maxFee = Math.floor((bountyVal / 2) * 10000) / 10000;
+    createFeeEl.max = String(maxFee);
+    if (createFeeLabelEl) {
+      createFeeLabelEl.textContent = `Attempt Fee (max ${maxFee || 0} DUSK)`;
+    }
+    const currentFee = Number(createFeeEl.value);
+    if (!Number.isNaN(currentFee) && currentFee > maxFee) {
+      createFeeEl.value = String(maxFee);
+    } else if (!Number.isNaN(currentFee) && currentFee < 0) {
+      createFeeEl.value = '0';
+    }
+  };
+
+  const clampDurationMin = () => {
+    if (!createDurationEl) return;
+    const val = Number(createDurationEl.value);
+    if (Number.isNaN(val) || val < 200) {
+      createDurationEl.value = '200';
+    } else {
+      createDurationEl.value = String(Math.floor(val));
+    }
+  };
+
+  createBountyEl?.addEventListener('input', syncAttemptFeeCap);
+  createBountyEl?.addEventListener('change', syncAttemptFeeCap);
+  createFeeEl?.addEventListener('input', syncAttemptFeeCap);
+  createFeeEl?.addEventListener('change', syncAttemptFeeCap);
+  createDurationEl?.addEventListener('input', () => {
+    if (!createDurationEl) return;
+    const raw = createDurationEl.value.trim();
+    const val = Number(raw);
+    if (raw.length >= 3 && (!Number.isFinite(val) || val < 200)) {
+      createDurationEl.value = '200';
+    }
+  });
+  createDurationEl?.addEventListener('change', clampDurationMin);
+  createDurationEl?.addEventListener('blur', clampDurationMin);
+  syncAttemptFeeCap();
+
   document.getElementById('createVaultForm')?.addEventListener('submit', async e => {
     e.preventDefault();
     try {
+      syncAttemptFeeCap();
+      clampDurationMin();
       const title = document.getElementById('createTitleInput').value;
       const category = document.getElementById('createCategoryInput').value;
       const lore = document.getElementById('createLoreInput').value;
@@ -1091,7 +1141,7 @@ function setupEventListeners() {
       const plaintextAnswer = document.getElementById('createAnswerInput').value;
       const bountyDusk = document.getElementById('createBountyInput').value;
       const attemptFeeDusk = document.getElementById('createAttemptFeeInput')?.value || '0';
-      const durationBlocks = Number(document.getElementById('createDurationInput').value || 200);
+      const durationBlocks = Math.max(200, Math.floor(Number(document.getElementById('createDurationInput').value || 200)));
 
       if (plaintextAnswer.trim().length < 4) {
         throw new Error('Use an answer of at least 4 characters so its SHA-256 hash cannot be trivially brute-forced.');
@@ -1102,8 +1152,8 @@ function setupEventListeners() {
       if (attemptFeeLux > bountyLux / 2n) {
         throw new Error('Attempt fee cannot exceed 50% of the initial vault bounty.');
       }
-      if (durationBlocks < 5) {
-        throw new Error('Expiry duration must be at least 5 blocks so solvers have time to commit and reveal.');
+      if (durationBlocks < 200) {
+        throw new Error('Expiry duration must be at least 200 blocks.');
       }
       const {prepared} = await prepareCreateVault(state.dusk, {
         title,
@@ -1119,6 +1169,7 @@ function setupEventListeners() {
       closeModal();
       await signAndSubmit(prepared, `Forge Vault "${title}" (${bountyDusk} DUSK)`);
       e.target.reset();
+      syncAttemptFeeCap();
     } catch (err) {
       showToast(err.message || String(err), 'err');
     }
