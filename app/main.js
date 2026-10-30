@@ -1092,9 +1092,6 @@ function setupEventListeners() {
     const bountyVal = Math.max(0, Number(createBountyEl.value) || 0);
     const maxFee = Math.floor((bountyVal / 2) * 10000) / 10000;
     createFeeEl.max = String(maxFee);
-    if (createFeeLabelEl) {
-      createFeeLabelEl.textContent = `Attempt Fee (max ${maxFee || 0} DUSK)`;
-    }
     const currentFee = Number(createFeeEl.value);
     if (!Number.isNaN(currentFee) && currentFee > maxFee) {
       createFeeEl.value = String(maxFee);
