@@ -497,6 +497,16 @@ async function renderVaultInspector() {
 
   const activeAccount = state.account;
   const isCreator = Boolean(activeAccount && vault.creator === activeAccount);
+  const creatorCrackedVaults = state.vaults.filter(
+    v => v.creator === vault.creator && v.status === STATUS_CRACKED
+  );
+  const creatorPastAnswers = creatorCrackedVaults
+    .map(v => v.winningAnswer)
+    .filter(Boolean)
+    .slice(0, 3);
+  const creatorRepText = creatorCrackedVaults.length > 0
+    ? `${creatorCrackedVaults.length} solved${creatorPastAnswers.length ? ` (${creatorPastAnswers.map(a => `"${a}"`).join(', ')})` : ''}`
+    : 'New riddler (0 solved)';
   const draft = loadDraft(vault.id, activeAccount);
   const activeShadow = activeAccount ? await computeShadowTag(activeAccount) : 'Shadow #------';
 
@@ -544,6 +554,10 @@ async function renderVaultInspector() {
       <div class="meta-item">
         <span>Creator (Moonlight)</span>
         <code title="${escapeHtml(vault.creator)}">${escapeHtml(vault.creatorShort)}${isCreator ? ' (You)' : ''}</code>
+      </div>
+      <div class="meta-item">
+        <span>Creator Track Record</span>
+        <strong title="Verified on-chain from previously cracked vaults by this creator">${escapeHtml(creatorRepText)}</strong>
       </div>
       <div class="meta-item">
         <span>Attempt Fee (80% Creator / 20% Pot)</span>
