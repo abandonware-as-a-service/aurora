@@ -1087,11 +1087,14 @@ function setupEventListeners() {
   const createFeeLabelEl = document.getElementById('createAttemptFeeLabel');
   const createDurationEl = document.getElementById('createDurationInput');
 
-  const syncAttemptFeeCap = () => {
+  const syncAttemptFeeCap = ({clampValue = true} = {}) => {
     if (!createBountyEl || !createFeeEl) return;
-    const bountyVal = Math.max(0, Number(createBountyEl.value) || 0);
+    const rawBounty = createBountyEl.value.trim();
+    if (!rawBounty) return;
+    const bountyVal = Math.max(0, Number(rawBounty) || 0);
     const maxFee = Math.floor((bountyVal / 2) * 10000) / 10000;
     createFeeEl.max = String(maxFee);
+    if (!clampValue) return;
     const currentFee = Number(createFeeEl.value);
     if (!Number.isNaN(currentFee) && currentFee > maxFee) {
       createFeeEl.value = String(maxFee);
@@ -1110,10 +1113,11 @@ function setupEventListeners() {
     }
   };
 
-  createBountyEl?.addEventListener('input', syncAttemptFeeCap);
-  createBountyEl?.addEventListener('change', syncAttemptFeeCap);
-  createFeeEl?.addEventListener('input', syncAttemptFeeCap);
-  createFeeEl?.addEventListener('change', syncAttemptFeeCap);
+  // While typing in Initial Bounty, update max attribute without overwriting Attempt Fee mid-keystroke
+  createBountyEl?.addEventListener('input', () => syncAttemptFeeCap({clampValue: false}));
+  createBountyEl?.addEventListener('blur', () => syncAttemptFeeCap({clampValue: true}));
+  createFeeEl?.addEventListener('input', () => syncAttemptFeeCap({clampValue: true}));
+  createFeeEl?.addEventListener('change', () => syncAttemptFeeCap({clampValue: true}));
   createDurationEl?.addEventListener('input', () => {
     if (!createDurationEl) return;
     const raw = createDurationEl.value.trim();
