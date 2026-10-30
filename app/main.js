@@ -203,7 +203,44 @@ function isWalletConnected() {
   return Boolean(ws?.selectedAddress && (ws?.authorized || shouldAutoConnectWallet()));
 }
 
-async function signAndSubmit(preparedTx, label) {
+function extractTxHash(submitted) {
+  if (!submitted) return '';
+  if (typeof submitted === 'string') return submitted.replace(/^0x/i, '');
+  const raw = submitted.hash ?? submitted.txHash ?? submitted.tx_hash ?? submitted.id ?? '';
+  return String(raw).replace(/^0x/i, '');
+}
+
+// Settle "submitted" activity entries by checking actual on-chain vault state,
+// so the feed is correct even when receipt tracking (WebSocket/RUES) is unavailable.
+function reconcilePendingActivity() {
+  let changed = false;
+  for (const item of state.txHistory) {
+    if (item.status !== 'submitted') continue;
+    if (item.vaultId == null) {
+      const m = /Vault #(\d+)/.exec(item.summary || '');
+      if (m) item.vaultId = Number(m[1]);
+    }
+    if (item.vaultId == null) continue;
+    const vault = state.vaults.find(v => v.id === item.vaultId);
+    if (!vault) continue;
+
+    let confirmed = false;
+    if (item.fnName === 'reveal_solution') confirmed = vault.status === STATUS_CRACKED;
+    else if (item.fnName === 'reclaim_expired') confirmed = vault.status === STATUS_RECLAIMED;
+    else if (item.fnName === 'commit_solution') {
+      confirmed = Boolean(state.activeCommit && state.selectedVaultId === item.vaultId) || vault.status !== STATUS_OPEN;
+    }
+
+    if (confirmed) {
+      item.status = 'executed';
+      item.summary = item.summary.replace('Submitted to Dusk Network', 'Confirmed on-chain');
+      changed = true;
+    }
+  }
+  if (changed) saveTxHistory();
+}
+
+async function signAndSubmit(preparedTx, label, meta = {}) {
   recordPreparedCall(preparedTx);
 
   if (!state.dusk) {
@@ -217,41 +254,55 @@ async function signAndSubmit(preparedTx, label) {
 
   showToast(`Awaiting Dusk Wallet signature for ${preparedTx.fnName}…`, 'ok');
   const submitted = await state.dusk.wallet.sendContractCall(preparedTx);
-  const txHash = String(submitted?.hash || '');
+  const txHash = extractTxHash(submitted);
+  const vaultId = meta.vaultId ?? null;
 
   pushTxActivity({
     fnName: preparedTx.fnName,
     status: 'submitted',
     txHash,
+    vaultId,
     summary: `${label} — Submitted to Dusk Network`,
   });
 
-  showToast(`Transaction submitted (${txHash.slice(0, 12)}…) — waiting for execution…`, 'ok');
+  showToast(
+    txHash
+      ? `Transaction submitted (${txHash.slice(0, 12)}…) — waiting for execution…`
+      : 'Transaction submitted — waiting for execution…',
+    'ok'
+  );
 
-  try {
-    const receipt = await state.dusk.waitForTxReceipt(txHash, {timeoutMs: 60000});
-    if (receipt?.ok === false) {
-      pushTxActivity({
-        fnName: preparedTx.fnName,
-        status: 'failed',
-        txHash,
-        summary: `Execution failed: ${receipt.error || 'Contract reverted'}`,
-      });
-      showToast(`Contract execution failed: ${receipt.error || 'reverted'}`, 'err');
-    } else {
-      pushTxActivity({
-        fnName: preparedTx.fnName,
-        status: 'executed',
-        txHash,
-        summary: `${label} — Executed on DuskVM`,
-      });
-      showToast(`${label} confirmed on DuskVM!`, 'ok');
+  if (/^[0-9a-fA-F]{64}$/.test(txHash)) {
+    try {
+      const receipt = await state.dusk.waitForTxReceipt(txHash, {timeoutMs: 60000});
+      if (receipt?.status === 'executed' && receipt.ok !== false) {
+        pushTxActivity({
+          fnName: preparedTx.fnName,
+          status: 'executed',
+          txHash,
+          vaultId,
+          summary: `${label} — Executed on DuskVM`,
+        });
+        showToast(`${label} confirmed on DuskVM!`, 'ok');
+      } else if (receipt?.status === 'failed') {
+        pushTxActivity({
+          fnName: preparedTx.fnName,
+          status: 'failed',
+          txHash,
+          vaultId,
+          summary: `Execution failed: ${receipt.error || 'Contract reverted'}`,
+        });
+        showToast(`Contract execution failed: ${receipt.error || 'reverted'}`, 'err');
+      }
+      // timeout / untrackable: leave as "submitted" and let on-chain reconciliation settle it
+    } catch (err) {
+      console.warn('Receipt tracking unavailable, falling back to on-chain state check:', err);
     }
-  } catch {
-    // Even if WebSocket tracking is unavailable on the node, refresh state
   }
 
   await syncFromNode();
+  // Give the block a moment to finalize, then re-check on-chain state once more
+  setTimeout(() => syncFromNode().catch(() => {}), 12000);
 }
 
 async function refreshWalletBalance() {
@@ -304,6 +355,7 @@ async function syncFromNode() {
     state.nodeError = err?.message || String(err);
   }
 
+  reconcilePendingActivity();
   await refreshWalletBalance();
   await renderWalletHeader();
   renderStats();
@@ -736,7 +788,7 @@ function bindInspectorEvents(vault, draft) {
   reclaimBtn?.addEventListener('click', async () => {
     try {
       const tx = await prepareReclaimExpired(state.dusk, {vaultId: vault.id});
-      await signAndSubmit(tx, `Reclaim expired Vault #${vault.id} bounty`);
+      await signAndSubmit(tx, `Reclaim expired Vault #${vault.id} bounty`, {vaultId: vault.id});
     } catch (err) {
       showToast(err.message || String(err), 'err');
     }
@@ -803,7 +855,7 @@ function bindInspectorEvents(vault, draft) {
         salt: draft.salt,
         attemptFeeLux: vault.attemptFeeLux,
       });
-      await signAndSubmit(prepared, `Commit solution to Vault #${vault.id}`);
+      await signAndSubmit(prepared, `Commit solution to Vault #${vault.id}`, {vaultId: vault.id});
     } catch (err) {
       showToast(err.message || String(err), 'err');
     }
@@ -820,7 +872,7 @@ function bindInspectorEvents(vault, draft) {
         discloseWinner: draft.disclose,
         alias: draft.alias,
       });
-      await signAndSubmit(prepared, `Reveal solution & claim Vault #${vault.id}`);
+      await signAndSubmit(prepared, `Reveal solution & claim Vault #${vault.id}`, {vaultId: vault.id});
     } catch (err) {
       showToast(err.message || String(err), 'err');
     }
