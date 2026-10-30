@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@600;700&amp;display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./app/style.css" />
+  <link rel="stylesheet" href="./app/style.css?v=3" />
 </head>
 <body>
   <!-- Atmospheric Aurora Borealis Backdrop -->
@@ -245,7 +245,7 @@
           <textarea id="createLoreInput" rows="3" maxlength="600" required placeholder="Describe the puzzle, cipher, or question solvers must crack..."></textarea>
         </label>
 
-        <div class="form-grid-equal">
+        <div class="form-grid-2">
           <label class="form-field">
             <span>Secret Answer (hashed client-side) *</span>
             <input id="createAnswerInput" type="text" required placeholder="e.g. blindsignature" autocomplete="off" />
@@ -266,7 +266,7 @@
             <input id="createAttemptFeeInput" type="number" min="0" max="50000" step="any" value="2" required />
           </label>
           <label class="form-field">
-            <span>Expiry Duration (min 200 blocks) *</span>
+            <span>Expiry (Blocks, min 200) *</span>
             <input id="createDurationInput" type="number" min="200" max="1000000" step="1" value="200" required />
           </label>
         </div>
@@ -284,6 +284,6 @@
     </div>
   </div>
 
-  <script type="module" src="./app/main.js"></script>
+  <script type="module" src="./app/main.js?v=3"></script>
 </body>
 </html>
