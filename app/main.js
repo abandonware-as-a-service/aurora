@@ -1144,8 +1144,8 @@ function setupEventListeners() {
         throw new Error('Use an answer of at least 4 characters so its SHA-256 hash cannot be trivially brute-forced.');
       }
 
-      const bountyLux = parseDuskToLux(bountyDusk);
-      const attemptFeeLux = Number(attemptFeeDusk) > 0 ? parseDuskToLux(attemptFeeDusk) : 0n;
+      const bountyLux = BigInt(parseDuskToLux(bountyDusk));
+      const attemptFeeLux = Number(attemptFeeDusk) > 0 ? BigInt(parseDuskToLux(attemptFeeDusk)) : 0n;
       if (attemptFeeLux > bountyLux / 2n) {
         throw new Error('Attempt fee cannot exceed 50% of the initial vault bounty.');
       }
