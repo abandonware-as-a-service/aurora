@@ -1075,6 +1075,45 @@ function setupEventListeners() {
   document.getElementById('disclosePublicBtn')?.addEventListener('click', () => handleDisclosure(true));
   document.getElementById('discloseAnonBtn')?.addEventListener('click', () => handleDisclosure(false));
 
+  // How It Works & Risks Guide Modal (Auto-opens unless user checked "Don't show this again")
+  const GUIDE_DISMISSED_KEY = 'aurora.guide.dismissed';
+  const guideModal = document.getElementById('guideModal');
+  const dontShowGuideCheck = document.getElementById('dontShowGuideCheck');
+
+  const isGuideDismissed = () => {
+    try {
+      return localStorage.getItem(GUIDE_DISMISSED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  };
+
+  const openGuideModal = () => {
+    if (dontShowGuideCheck) {
+      dontShowGuideCheck.checked = isGuideDismissed();
+    }
+    guideModal?.classList.remove('hidden');
+  };
+
+  const closeGuideModal = () => {
+    try {
+      if (dontShowGuideCheck?.checked) {
+        localStorage.setItem(GUIDE_DISMISSED_KEY, '1');
+      } else {
+        localStorage.removeItem(GUIDE_DISMISSED_KEY);
+      }
+    } catch {}
+    guideModal?.classList.add('hidden');
+  };
+
+  document.getElementById('openGuideModalBtn')?.addEventListener('click', openGuideModal);
+  document.getElementById('closeGuideModalBtn')?.addEventListener('click', closeGuideModal);
+  document.getElementById('confirmGuideModalBtn')?.addEventListener('click', closeGuideModal);
+
+  if (!isGuideDismissed()) {
+    openGuideModal();
+  }
+
   // Create Vault Modal
   const modal = document.getElementById('createVaultModal');
   const openModal = () => modal?.classList.remove('hidden');

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@600;700&amp;display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./app/style.css?v=6" />
+  <link rel="stylesheet" href="./app/style.css?v=7" />
 </head>
 <body>
   <!-- Atmospheric Aurora Borealis Backdrop -->
@@ -66,6 +66,10 @@
         <span class="dot live"></span>
         <span id="networkBadgeLabel">Dusk Testnet</span>
       </div>
+
+      <button id="openGuideModalBtn" class="guide-trigger-btn" type="button" title="Read how Aurora works, fee refunds, and riddler risk warnings">
+        ✦ How It Works &amp; Risks
+      </button>
 
       <button id="syncNodeBtn" class="chip-btn" type="button" title="Sync state from Dusk Node">
         ↻ Sync
@@ -284,6 +288,83 @@
     </div>
   </div>
 
-  <script type="module" src="./app/main.js?v=6"></script>
+  <!-- How It Works & Protocol Safety Guide Modal -->
+  <div id="guideModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="guideModalTitle">
+    <div class="modal-card guide-modal-card">
+      <div class="modal-header">
+        <div>
+          <span class="privacy-badge">Protocol Mechanics &amp; Safety Guide</span>
+          <h2 id="guideModalTitle" style="margin-top:4px;">How Aurora Works</h2>
+          <p class="panel-sub">Read this before forging vaults or paying attempt fees on DuskVM</p>
+        </div>
+        <button id="closeGuideModalBtn" class="icon-btn" type="button" aria-label="Close">✕</button>
+      </div>
+
+      <div class="guide-sections">
+        <div class="guide-card">
+          <h3>1. 2-Step Commit–Reveal (Anti-Front-Running)</h3>
+          <p>
+            If you submitted a plaintext answer in a single transaction, mempool bots could see your answer and steal the bounty before your transaction confirmed. Aurora prevents this with a 2-step flow:
+          </p>
+          <ul>
+            <li><strong>Step 1 — Blinded Commit (<code>commit_solution</code>):</strong> Anchors a salted SHA-256 hash bound to your Moonlight <code>BlsPublicKey</code>. Nobody can see your guess.</li>
+            <li><strong>Step 2 — Reveal &amp; Claim (<code>reveal_solution</code>):</strong> At least <strong>1 block later</strong>, reveal your plaintext answer + salt. The contract verifies your commitment, transfers the DUSK bounty immediately, and publishes the winning answer on-chain.</li>
+          </ul>
+        </div>
+
+        <div class="guide-card">
+          <h3>2. Attempt Fee Escrow (“Virtual PoW”)</h3>
+          <p>
+            When forging a vault, the creator locks an initial <strong>DUSK Bounty</strong> and can set an <strong>Attempt Fee</strong> (up to 50% of the initial bounty) charged on each Step 1 commitment:
+          </p>
+          <ul>
+            <li><strong>20% of every Attempt Fee</strong> is added directly to the vault’s <strong>Bounty Jackpot</strong> for the winning solver.</li>
+            <li><strong>80% of every Attempt Fee</strong> is locked in <strong>Creator Fee Escrow</strong>—the creator <em>only</em> unlocks these fees if someone actually cracks the riddle.</li>
+          </ul>
+        </div>
+
+        <div class="guide-card">
+          <h3>3. How to Reclaim Funds When a Riddle Expires</h3>
+          <p>
+            Every vault has a mandatory expiry duration (<strong>minimum 200 blocks</strong>) so funds can never be trapped forever:
+          </p>
+          <ul>
+            <li>Once <code>Current Block &gt;= Expiry Block</code> (plus a 5-block reveal grace window for any last-second commitment), the vault badge turns <strong>Expired</strong>.</li>
+            <li>Open the vault in the Inspector and click <strong>“Settle Expired &amp; Refund Fees”</strong> (calls <code>reclaim_expired</code>). <strong>Anyone</strong>—either the creator or any solver—can click this button.</li>
+            <li>That single transaction refunds the original bounty principal back to the creator <strong>and automatically refunds 100% of every solver’s attempt fees</strong> back to their Moonlight wallets.</li>
+          </ul>
+        </div>
+
+        <div class="guide-card guide-card-warn">
+          <h3>⚠️ 4. Risk Warning: New or Unproven Riddlers</h3>
+          <p>
+            Because riddles are written by humans, <strong>the riddle creator always knows the secret answer</strong>. On a permissionless blockchain, a dishonest creator could write an unsolvable or gibberish riddle, wait for players to pay attempt fees, and then solve their own riddle from a <strong>second wallet</strong> to capture the fee pool.
+          </p>
+          <ul>
+            <li><strong>Check the Creator Track Record:</strong> Every vault displays the creator’s on-chain history of previously cracked vaults and their revealed answers (e.g. <code>2 solved ("silence", "witness")</code> vs. <code>New riddler (0 solved)</code>).</li>
+            <li><strong>Full Post-Solve Transparency:</strong> Whenever a vault is cracked, the contract forces the plaintext <code>winning_answer</code> to be published permanently on-chain, immediately exposing any creator who used a fake answer.</li>
+            <li><strong>Play Smart:</strong> Avoid paying large attempt fees on vaults from brand-new addresses (<code>0 solved</code>) or riddles with vague, subjective prompts.</li>
+          </ul>
+        </div>
+
+        <div class="guide-card">
+          <h3>5. Leaderboard Privacy (Shadow Mode vs. Public Alias)</h3>
+          <p>
+            When revealing a winning solution (or anytime afterward via <strong>On-Chain Privacy Control</strong>), you choose whether the contract exposes your <code>BlsPublicKey</code> + custom alias on the leaderboard, or masks your key on-chain as <code>null</code> behind a deterministic <strong><code>Shadow #xxxxxx</code></strong> tag.
+          </p>
+        </div>
+      </div>
+
+      <div class="guide-modal-footer">
+        <label class="checkbox-row">
+          <input id="dontShowGuideCheck" type="checkbox" />
+          <span><strong>Don’t show this automatically again</strong> (you can always reopen via <em>“✦ How It Works &amp; Risks”</em> in the top bar)</span>
+        </label>
+        <button id="confirmGuideModalBtn" class="primary-btn" type="button">I Understand — Enter Aurora</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./app/main.js?v=7"></script>
 </body>
 </html>

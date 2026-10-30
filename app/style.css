@@ -1297,3 +1297,96 @@ code, pre {
   gap: 10px;
   margin-top: 6px;
 }
+
+/* How It Works & Risks Trigger + Guide Modal */
+.guide-trigger-btn {
+  background: linear-gradient(135deg, rgba(192, 132, 252, 0.16), rgba(56, 189, 248, 0.14));
+  border: 1px solid rgba(192, 132, 252, 0.48);
+  color: #e9d5ff;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 13px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  box-shadow: 0 0 18px rgba(192, 132, 252, 0.15);
+}
+
+.guide-trigger-btn:hover {
+  border-color: var(--accent-aurora);
+  color: #ffffff;
+  background: linear-gradient(135deg, rgba(45, 212, 191, 0.22), rgba(192, 132, 252, 0.22));
+  transform: translateY(-1px);
+}
+
+.guide-modal-card {
+  max-width: 740px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.guide-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  padding-right: 4px;
+  margin-bottom: 16px;
+}
+
+.guide-card {
+  background: rgba(5, 9, 20, 0.78);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--accent-aurora);
+  border-radius: var(--radius-md);
+  padding: 13px 16px;
+  font-size: 12.8px;
+  line-height: 1.58;
+  color: var(--text-secondary);
+}
+
+.guide-card h3 {
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 5px;
+}
+
+.guide-card p {
+  margin-bottom: 7px;
+}
+
+.guide-card ul {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.guide-card strong {
+  color: var(--text-main);
+}
+
+.guide-card-warn {
+  border-color: rgba(251, 191, 36, 0.34);
+  border-left: 3px solid var(--accent-amber);
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.08), rgba(5, 9, 20, 0.85));
+}
+
+.guide-card-warn h3 {
+  color: #fde68a;
+}
+
+.guide-modal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+}
